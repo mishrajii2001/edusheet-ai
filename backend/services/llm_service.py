@@ -1,45 +1,33 @@
-from groq import Groq
+from langchain_groq import ChatGroq
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.output_parsers import StrOutputParser
 from config import GROQ_API_KEY
 import json
 
-client = Groq(api_key=GROQ_API_KEY)
+llm = ChatGroq(
+    api_key=GROQ_API_KEY,
+    model="llama-3.3-70b-versatile",
+    temperature=0.7,
+    max_tokens=3000
+)
 
-def generate_worksheet_content(
-    topic: str = None,
-    code: str = None,
-    description: str = None,
-    custom_instructions: str = None,
-    sections: list = None,
-    programming_language: str = "Python",
-    web_content: str = None
-) -> dict:
+prompt_template = ChatPromptTemplate.from_messages([
+    ("system", """You are an expert college lab worksheet generator.
+Always return ONLY a valid JSON object.
+Never add any text outside the JSON.
+Never add markdown or backticks."""),
+    ("human", """
+Generate a college lab worksheet for the following:
 
-    topic_line = f"Topic: {topic}" if topic else "Topic: Not provided — analyze the code below"
-    code_line = f"Student's Code:\n{code}" if code else "Code: Not provided — generate appropriate code"
-    description_line = f"Extra Description: {description}" if description else ""
-    instructions_line = f"Custom Instructions: {custom_instructions}" if custom_instructions else ""
-    web_line = f"Reference Content from Web:\n{web_content}" if web_content else ""
-    sections_line = ", ".join(sections) if sections else "objective, theory, code, learning_outcomes"
-
-    prompt = f"""
-You are an expert college lab worksheet generator.
-
-{topic_line}
-{description_line}
-{code_line}
-{instructions_line}
+Topic: {topic}
+Description: {description}
+Student Code: {code}
+Custom Instructions: {custom_instructions}
 Programming Language: {programming_language}
+Sections Needed: {sections}
 
-{web_line}
-
-Generate a complete college lab worksheet with these sections ONLY: {sections_line}
-
-STRICT RULES:
-- Return ONLY a valid JSON object, nothing else
-- No extra text, no markdown, no backticks
-- Keep theory clear and simple for undergraduate students
-- Code must be properly commented
-- Learning outcomes must be specific and measurable
+Reference Content:
+{web_content}
 
 Return this exact JSON structure:
 {{
@@ -55,35 +43,42 @@ Return this exact JSON structure:
     "conclusion": "conclusion text here"
 }}
 
-Only include sections that were requested: {sections_line}
-For unrequested sections, set their value to null.
-"""
+Only include sections requested: {sections}
+Set unrequested sections to null.
+""")
+])
 
-    response = client.chat.completions.create(
-        model="llama-3.3-70b-versatile",
-        messages=[
-            {
-                "role": "system",
-                "content": "You are an expert worksheet generator. Always return valid JSON only. Never add any text outside the JSON."
-            },
-            {
-                "role": "user",
-                "content": prompt
-            }
-        ],
-        temperature=0.7,
-        max_tokens=3000
-    )
+parser = StrOutputParser()
 
-    raw = response.choices[0].message.content.strip()
+chain = prompt_template | llm | parser
+
+def generate_worksheet_content(
+    topic=None,
+    code=None,
+    description=None,
+    custom_instructions=None,
+    sections=None,
+    programming_language="Python",
+    web_content=None
+) -> dict:
+
+    response = chain.invoke({
+        "topic": topic or "Not provided - analyze the code",
+        "code": code or "Not provided - generate appropriate code",
+        "description": description or "",
+        "custom_instructions": custom_instructions or "",
+        "programming_language": programming_language,
+        "sections": ", ".join(sections) if sections else "objective, theory, code, learning_outcomes",
+        "web_content": web_content or "Not available - use your knowledge"
+    })
 
     try:
-        clean = raw.replace("```json", "").replace("```", "").strip()
+        clean = response.replace("```json", "").replace("```", "").strip()
         result = json.loads(clean)
         return result
     except json.JSONDecodeError:
         return {
             "title": topic or "Worksheet",
             "error": "Failed to parse LLM response",
-            "raw": raw
+            "raw": response
         }
