@@ -1,19 +1,14 @@
-from fastapi import APIRouter, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, HTTPException, Form
 from fastapi.responses import FileResponse
-from models.schemas import WorksheetRequest, WorksheetResponse
+from models.schemas import WorksheetResponse
 from services.search_service import search_web
 from services.llm_service import generate_worksheet_content
 from services.vectordb_service import store_worksheet, retrieve_worksheet
 from services.document_service import create_worksheet
 import json
 import os
-import shutil
-import uuid
 
 router = APIRouter()
-
-UPLOAD_DIR = os.path.join(os.path.dirname(__file__), "..", "uploads")
-os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 @router.post("/generate")
 async def generate_worksheet(
@@ -23,12 +18,14 @@ async def generate_worksheet(
     custom_instructions: str = Form(None),
     sections: str = Form(...),
     programming_language: str = Form("Python"),
-    formatting: str = Form(...),
-    images: list[UploadFile] = File(None),
-    image_sections: str = Form(None)
+    formatting: str = Form(...)
 ):
     try:
-        sections_list = json.loads(sections)
+        try:
+            sections_list = json.loads(sections)
+        except:
+            sections_list = [s.strip() for s in sections.split(",")]
+
         formatting_dict = json.loads(formatting)
 
         if not topic and not code:
@@ -36,23 +33,6 @@ async def generate_worksheet(
                 status_code=400,
                 detail="Please provide either a topic or paste your code"
             )
-
-        saved_images = {}
-        if images:
-            image_sections_list = json.loads(image_sections) if image_sections else []
-            for i, image in enumerate(images):
-                section_key = image_sections_list[i] if i < len(image_sections_list) else "expected_output"
-                ext = image.filename.split(".")[-1]
-                filename = f"{uuid.uuid4().hex}.{ext}"
-                filepath = os.path.join(UPLOAD_DIR, filename)
-                with open(filepath, "wb") as f:
-                    shutil.copyfileobj(image.file, f)
-                if section_key not in saved_images:
-                    saved_images[section_key] = []
-                saved_images[section_key].append({
-                    "path": filepath,
-                    "caption": f"Figure: {image.filename}"
-                })
 
         content = None
         if topic:
@@ -86,7 +66,7 @@ async def generate_worksheet(
         file_name = create_worksheet(
             content=content,
             formatting=formatting_dict,
-            images=saved_images if saved_images else None
+            images=None
         )
 
         return WorksheetResponse(
