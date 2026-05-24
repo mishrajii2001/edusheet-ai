@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import './App.css';
 import axios from 'axios';
 
@@ -23,6 +23,7 @@ const SECTIONS = [
 const FONTS = ['Times New Roman', 'Arial', 'Calibri', 'Georgia', 'Garamond'];
 const ALIGNMENTS = ['justified', 'left', 'center', 'right'];
 const LANGUAGES = ['Python', 'Java', 'C++', 'C', 'JavaScript', 'R', 'MATLAB'];
+const MAX_IMAGES = 3;
 
 const STEPS = [
   { icon: '🌐', label: 'Searching the web' },
@@ -50,6 +51,8 @@ export default function App() {
   const [loadingStep, setLoadingStep] = useState(0);
   const [error, setError] = useState('');
   const [fileName, setFileName] = useState('');
+  const [images, setImages] = useState([]);
+  const fileInputRefs = [useRef(), useRef(), useRef()];
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', darkMode ? 'dark' : 'light');
@@ -65,6 +68,50 @@ export default function App() {
     setSections(prev => prev.includes(key) ? prev.filter(s => s !== key) : [...prev, key]);
   };
 
+  const handleImageAdd = (e, index) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const validTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/bmp'];
+    if (!validTypes.includes(file.type)) {
+      setError('Only image files are allowed (JPG, PNG, GIF, WEBP)');
+      return;
+    }
+
+    if (file.size > 10 * 1024 * 1024) {
+      setError('Image size should be less than 10MB');
+      return;
+    }
+
+    const preview = URL.createObjectURL(file);
+    const newImages = [...images];
+    newImages[index] = {
+      file,
+      preview,
+      section: 'expected_output',
+      caption: ''
+    };
+    setImages(newImages);
+    setError('');
+  };
+
+  const handleImageRemove = (index) => {
+    const newImages = [...images];
+    if (newImages[index]?.preview) {
+      URL.revokeObjectURL(newImages[index].preview);
+    }
+    newImages[index] = null;
+    setImages(newImages.filter(Boolean).length === 0 ? [] : newImages);
+  };
+
+  const handleImageMeta = (index, field, value) => {
+    const newImages = [...images];
+    if (newImages[index]) {
+      newImages[index] = { ...newImages[index], [field]: value };
+      setImages(newImages);
+    }
+  };
+
   const handleGenerate = async () => {
     if (!topic && !code) { setError('Please enter a topic or paste your code'); return; }
     const allSections = [...sections];
@@ -73,18 +120,46 @@ export default function App() {
         .forEach(s => { if (!allSections.includes(s)) allSections.push(s); });
     }
     if (allSections.length === 0) { setError('Please select at least one section'); return; }
+
     setLoading(true); setError(''); setFileName('');
-    const formatting = { font_family: fontFamily, heading_size: headingSize, subheading_size: headingSize - 1, body_size: bodySize, alignment, margin };
-    const params = new URLSearchParams();
-    if (topic) params.append('topic', topic);
-    if (description) params.append('description', description);
-    if (code) params.append('code', code);
-    if (customInstructions) params.append('custom_instructions', customInstructions);
-    params.append('sections', JSON.stringify(allSections));
-    params.append('programming_language', programmingLanguage);
-    params.append('formatting', JSON.stringify(formatting));
+
+    const formatting = {
+      font_family: fontFamily,
+      heading_size: headingSize,
+      subheading_size: headingSize - 1,
+      body_size: bodySize,
+      alignment,
+      margin
+    };
+
+    const formData = new FormData();
+    if (topic) formData.append('topic', topic);
+    if (description) formData.append('description', description);
+    if (code) formData.append('code', code);
+    if (customInstructions) formData.append('custom_instructions', customInstructions);
+    formData.append('sections', JSON.stringify(allSections));
+    formData.append('programming_language', programmingLanguage);
+    formData.append('formatting', JSON.stringify(formatting));
+
+    const validImages = images.filter(Boolean);
+    const imageMetadata = [];
+
+    validImages.forEach((img, i) => {
+      if (img?.file) {
+        formData.append(`image${i + 1}`, img.file);
+        imageMetadata.push({
+          section: img.section,
+          caption: img.caption || `Figure ${i + 1}`
+        });
+      }
+    });
+
+    formData.append('image_data', JSON.stringify(imageMetadata));
+
     try {
-      const res = await axios.post(`${API_URL}/api/worksheet/generate`, params);
+      const res = await axios.post(`${API_URL}/api/worksheet/generate`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
       if (res.data.success) setFileName(res.data.file_name);
     } catch (err) {
       setError(err.response?.data?.detail || 'Something went wrong. Please try again.');
@@ -93,22 +168,24 @@ export default function App() {
 
   const handleDownload = () => window.open(`${API_URL}/api/worksheet/download/${fileName}`, '_blank');
 
-  const resetAll = () => { setFileName(''); setTopic(''); setCode(''); setDescription(''); setCustomInstructions(''); setActiveTab('content'); };
+  const resetAll = () => {
+    setFileName(''); setTopic(''); setCode('');
+    setDescription(''); setCustomInstructions('');
+    setImages([]); setActiveTab('content');
+  };
+
+  const activeImageCount = images.filter(Boolean).length;
 
   return (
     <div className="app">
-      {/* Animated background orbs */}
       <div className="bg-orb orb1" />
       <div className="bg-orb orb2" />
       <div className="bg-orb orb3" />
 
-      {/* Header */}
       <header className="header">
         <div className="header-inner">
           <div className="logo">
-            <div className="logo-badge">
-              <span>📝</span>
-            </div>
+            <div className="logo-badge"><span>📝</span></div>
             <div className="logo-text">
               <h1>EduSheet <span className="logo-accent">AI</span></h1>
               <p>College worksheets in seconds</p>
@@ -127,14 +204,12 @@ export default function App() {
       </header>
 
       <main className="main">
-        {/* Hero section */}
         <div className="hero">
           <div className="hero-badge">✨ Powered by LLaMA 3 + RAG + LangChain</div>
           <h2 className="hero-title">Generate Perfect<br /><span className="gradient-text">Lab Worksheets</span></h2>
-          <p className="hero-sub">Just enter your topic or paste your code — AI handles the rest.</p>
+          <p className="hero-sub">Enter your topic or paste your code — AI handles the rest.</p>
         </div>
 
-        {/* Tab Navigation */}
         <div className="tab-nav">
           {[
             { id: 'content', label: 'Content', icon: '📝', num: 1 },
@@ -144,26 +219,26 @@ export default function App() {
             <button key={t.id} className={`tab-btn ${activeTab === t.id ? 'active' : ''}`} onClick={() => setActiveTab(t.id)}>
               <span className="tab-num">{t.num}</span>
               <span>{t.icon} {t.label}</span>
-              {activeTab === t.id && <span className="tab-active-bar" />}
             </button>
           ))}
         </div>
 
-        {/* Content Tab */}
         {activeTab === 'content' && (
           <div className="card slide-in">
-            <div className="card-title">
-              <span>📝</span> Topic & Content
-            </div>
+            <div className="card-title"><span>📝</span> Topic & Content</div>
 
             <div className="field">
               <label>Topic / Experiment Name <span className="req">*</span></label>
-              <input className={`inp ${topic ? 'inp-filled' : ''}`} type="text" placeholder="e.g. Bubble Sort Algorithm" value={topic} onChange={e => setTopic(e.target.value)} />
+              <input className={`inp ${topic ? 'inp-filled' : ''}`} type="text"
+                placeholder="e.g. Bubble Sort Algorithm"
+                value={topic} onChange={e => setTopic(e.target.value)} />
             </div>
 
             <div className="field">
               <label>Description <span className="opt">optional</span></label>
-              <input className="inp" type="text" placeholder="e.g. Focus on time complexity, include real world examples" value={description} onChange={e => setDescription(e.target.value)} />
+              <input className="inp" type="text"
+                placeholder="e.g. Focus on time complexity, include real world examples"
+                value={description} onChange={e => setDescription(e.target.value)} />
             </div>
 
             <div className="field">
@@ -173,35 +248,106 @@ export default function App() {
                   <div className="code-dots"><span /><span /><span /></div>
                   <span className="code-lang">{programmingLanguage}</span>
                 </div>
-                <textarea className="code-area" rows={7} placeholder="# Paste your code here — AI will analyze and use it..." value={code} onChange={e => setCode(e.target.value)} />
+                <textarea className="code-area" rows={7}
+                  placeholder="# Paste your code here — AI will analyze and use it..."
+                  value={code} onChange={e => setCode(e.target.value)} />
               </div>
             </div>
 
             <div className="field">
               <label>Custom Instructions <span className="opt">optional</span></label>
-              <input className="inp" type="text" placeholder="e.g. Keep theory under 100 words, add 5 viva questions" value={customInstructions} onChange={e => setCustomInstructions(e.target.value)} />
+              <input className="inp" type="text"
+                placeholder="e.g. Keep theory under 100 words, add 5 viva questions"
+                value={customInstructions} onChange={e => setCustomInstructions(e.target.value)} />
             </div>
 
             <div className="field">
               <label>Programming Language</label>
               <div className="pill-row">
                 {LANGUAGES.map(l => (
-                  <button key={l} className={`pill ${programmingLanguage === l ? 'pill-active' : ''}`} onClick={() => setProgrammingLanguage(l)}>{l}</button>
+                  <button key={l} className={`pill ${programmingLanguage === l ? 'pill-active' : ''}`}
+                    onClick={() => setProgrammingLanguage(l)}>{l}</button>
                 ))}
               </div>
             </div>
 
+            <div className="field">
+              <label>
+                Upload Images <span className="opt">optional — max 3 images</span>
+                {activeImageCount > 0 && (
+                  <span className="img-count-badge">{activeImageCount}/{MAX_IMAGES}</span>
+                )}
+              </label>
+              <p className="img-hint">
+                📸 Output screenshots, diagrams, flowcharts, graphs — anything you want in the worksheet
+              </p>
+
+              <div className="images-grid">
+                {[0, 1, 2].map(index => (
+                  <div key={index} className={`image-slot ${images[index] ? 'has-image' : ''}`}>
+                    {images[index] ? (
+                      <div className="image-card">
+                        <div className="image-preview-wrap">
+                          <img src={images[index].preview} alt={`upload ${index + 1}`} className="image-preview" />
+                          <button className="image-remove" onClick={() => handleImageRemove(index)}>✕</button>
+                          <div className="image-num">Image {index + 1}</div>
+                        </div>
+                        <div className="image-meta">
+                          <div className="field" style={{ marginBottom: 8 }}>
+                            <label style={{ fontSize: '0.75rem' }}>Place in section</label>
+                            <select className="sel" value={images[index].section}
+                              onChange={e => handleImageMeta(index, 'section', e.target.value)}>
+                              {SECTIONS.map(s => (
+                                <option key={s.key} value={s.key}>{s.icon} {s.label}</option>
+                              ))}
+                            </select>
+                          </div>
+                          <div className="field" style={{ marginBottom: 0 }}>
+                            <label style={{ fontSize: '0.75rem' }}>Caption <span className="opt">optional</span></label>
+                            <input className="inp" type="text" style={{ padding: '8px 12px', fontSize: '0.82rem' }}
+                              placeholder="e.g. Figure 1: Output of Bubble Sort"
+                              value={images[index].caption}
+                              onChange={e => handleImageMeta(index, 'caption', e.target.value)} />
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <button className="image-add-btn"
+                        onClick={() => fileInputRefs[index].current.click()}
+                        disabled={activeImageCount >= MAX_IMAGES && !images[index]}>
+                        <span className="image-add-icon">🖼️</span>
+                        <span className="image-add-text">
+                          {index === 0 ? 'Add Image' : `Image ${index + 1}`}
+                        </span>
+                        <span className="image-add-hint">
+                          {index === 0 ? 'Output, diagram...' : 'Optional'}
+                        </span>
+                        <input ref={fileInputRefs[index]} type="file" accept="image/*"
+                          style={{ display: 'none' }} onChange={e => handleImageAdd(e, index)} />
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              {activeImageCount > 0 && (
+                <div className="img-info">
+                  <span>✅ {activeImageCount} image{activeImageCount > 1 ? 's' : ''} will be embedded in worksheet</span>
+                  <button className="img-clear-all" onClick={() => setImages([])}>Clear all</button>
+                </div>
+              )}
+            </div>
+
             <button className="btn-next" onClick={() => setActiveTab('sections')}>
-              Continue to Sections <span>→</span>
+              Continue to Sections →
             </button>
           </div>
         )}
 
-        {/* Sections Tab */}
         {activeTab === 'sections' && (
           <div className="card slide-in">
             <div className="card-title"><span>📋</span> Sections to Include</div>
-            <p className="card-hint">Select sections in the order you want them in your worksheet</p>
+            <p className="card-hint">Select sections in the order you want them in the worksheet</p>
 
             {sections.length > 0 && (
               <div className="order-strip">
@@ -221,17 +367,22 @@ export default function App() {
 
             <div className="sec-grid">
               {SECTIONS.map(s => (
-                <button key={s.key} className={`sec-btn ${sections.includes(s.key) ? 'sec-active' : ''}`} onClick={() => toggleSection(s.key)}>
+                <button key={s.key} className={`sec-btn ${sections.includes(s.key) ? 'sec-active' : ''}`}
+                  onClick={() => toggleSection(s.key)}>
                   <span className="sec-icon">{s.icon}</span>
                   <span className="sec-label">{s.label}</span>
-                  {sections.includes(s.key) && <span className="sec-num">{sections.indexOf(s.key) + 1}</span>}
+                  {sections.includes(s.key) && (
+                    <span className="sec-num">{sections.indexOf(s.key) + 1}</span>
+                  )}
                 </button>
               ))}
             </div>
 
             <div className="field" style={{ marginTop: 20 }}>
               <label>➕ Custom Sections <span className="opt">separate with commas</span></label>
-              <input className="inp" type="text" placeholder="e.g. Aim, Introduction, Task to be Done, Apparatus" value={customSections} onChange={e => setCustomSections(e.target.value)} />
+              <input className="inp" type="text"
+                placeholder="e.g. Aim, Task to be Done, Apparatus"
+                value={customSections} onChange={e => setCustomSections(e.target.value)} />
             </div>
 
             <div className="btn-row">
@@ -241,7 +392,6 @@ export default function App() {
           </div>
         )}
 
-        {/* Formatting Tab */}
         {activeTab === 'formatting' && (
           <div className="card slide-in">
             <div className="card-title"><span>🎨</span> Formatting Settings</div>
@@ -273,7 +423,8 @@ export default function App() {
                     <span className="slider-label">{s.label}</span>
                     <span className="slider-val">{s.val}{s.label.includes('Size') ? 'pt' : '"'}</span>
                   </div>
-                  <input type="range" min={s.min} max={s.max} step={s.step || 1} value={s.val} onChange={e => s.set(Number(e.target.value))} />
+                  <input type="range" min={s.min} max={s.max} step={s.step || 1}
+                    value={s.val} onChange={e => s.set(Number(e.target.value))} />
                 </div>
               ))}
             </div>
@@ -293,19 +444,11 @@ export default function App() {
           </div>
         )}
 
-        {/* Error */}
-        {error && (
-          <div className="error-box">
-            <span>⚠️</span> {error}
-          </div>
-        )}
+        {error && <div className="error-box"><span>⚠️</span> {error}</div>}
 
-        {/* Loading */}
         {loading && (
           <div className="card loading-card slide-in">
-            <div className="loader-ring">
-              <div /><div /><div /><div />
-            </div>
+            <div className="loader-ring"><div /><div /><div /><div /></div>
             <p className="loading-title">Generating your worksheet...</p>
             <p className="loading-sub">This usually takes 15–25 seconds</p>
             <div className="steps-list">
@@ -320,7 +463,6 @@ export default function App() {
           </div>
         )}
 
-        {/* Success */}
         {fileName && !loading && (
           <div className="success-card slide-in">
             <div className="success-glow" />
@@ -328,25 +470,16 @@ export default function App() {
             <h3>Worksheet Ready!</h3>
             <p>Your formatted worksheet has been generated successfully.</p>
             <div className="success-btns">
-              <button className="btn-download" onClick={handleDownload}>
-                ⬇️ Download Worksheet
-              </button>
-              <button className="btn-new" onClick={resetAll}>
-                ✨ Generate Another
-              </button>
+              <button className="btn-download" onClick={handleDownload}>⬇️ Download Worksheet</button>
+              <button className="btn-new" onClick={resetAll}>✨ Generate Another</button>
             </div>
           </div>
         )}
 
-        {/* Generate Button */}
-        <button className={`btn-generate ${loading ? 'btn-loading' : ''}`} onClick={handleGenerate} disabled={loading}>
-          {loading ? (
-            <><span className="btn-spinner" /> Generating...</>
-          ) : (
-            <>✨ Generate Worksheet</>
-          )}
+        <button className={`btn-generate ${loading ? 'btn-loading' : ''}`}
+          onClick={handleGenerate} disabled={loading}>
+          {loading ? <><span className="btn-spinner" /> Generating...</> : <>✨ Generate Worksheet</>}
         </button>
-
       </main>
 
       <footer className="footer">
