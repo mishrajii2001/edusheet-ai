@@ -3,7 +3,7 @@ from fastapi.responses import FileResponse
 from models.schemas import WorksheetResponse
 from services.search_service import search_web
 from services.llm_service import generate_worksheet_content
-from services.vectordb_service import store_worksheet, retrieve_worksheet
+from services.vectordb_service import store_web_content, retrieve_web_content
 from services.document_service import create_worksheet
 import json
 import os
@@ -34,33 +34,29 @@ async def generate_worksheet(
                 detail="Please provide either a topic or paste your code"
             )
 
-        content = None
+        web_content = None
         if topic:
-            print(f"Checking ChromaDB for: {topic}")
-            content = retrieve_worksheet(topic)
-            if content:
-                print("Found in ChromaDB! Skipping web search.")
-
-        if not content:
-            web_content = None
-            if topic:
+            print("Checking ChromaDB for web content...")
+            web_content = retrieve_web_content(topic)
+            if web_content:
+                print("Found cached web content! Skipping Tavily search.")
+            else:
                 print("Searching web...")
                 web_content = search_web(topic)
+                if web_content:
+                    store_web_content(topic, web_content)
+                    print("Web content cached in ChromaDB!")
 
-            print("Generating with LLM...")
-            content = generate_worksheet_content(
-                topic=topic,
-                code=code,
-                description=description,
-                custom_instructions=custom_instructions,
-                sections=sections_list,
-                programming_language=programming_language,
-                web_content=web_content
-            )
-
-            if topic and content:
-                store_worksheet(topic, content)
-                print("Stored in ChromaDB!")
+        print("Generating with LLM...")
+        content = generate_worksheet_content(
+            topic=topic,
+            code=code,
+            description=description,
+            custom_instructions=custom_instructions,
+            sections=sections_list,
+            programming_language=programming_language,
+            web_content=web_content
+        )
 
         print("Creating worksheet document...")
         file_name = create_worksheet(

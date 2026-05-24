@@ -78,17 +78,32 @@ def create_worksheet(content, formatting, images=None):
         title.alignment = WD_ALIGN_PARAGRAPH.CENTER
         doc.add_paragraph()
 
-    sections_order = [
-        ("objective", "Objective"),
-        ("theory", "Theory"),
-        ("algorithm", "Algorithm"),
-        ("code", "Code"),
-        ("expected_output", "Expected Output"),
-        ("learning_outcomes", "Learning Outcomes"),
-        ("viva_questions", "Viva Questions"),
-        ("references", "References"),
-        ("conclusion", "Conclusion")
+    predefined_sections = [
+    ("aim", "Aim"),
+    ("introduction", "Introduction"),
+    ("objective", "Objective"),
+    ("apparatus", "Apparatus"),
+    ("task_to_be_done", "Task to be Done"),
+    ("theory", "Theory"),
+    ("algorithm", "Algorithm"),
+    ("code", "Code"),
+    ("expected_output", "Expected Output"),
+    ("result", "Result"),
+    ("conclusion", "Conclusion"),
+    ("learning_outcomes", "Learning Outcomes"),
+    ("viva_questions", "Viva Questions"),
+    ("references", "References")
     ]
+
+    predefined_keys = [k for k, _ in predefined_sections]
+
+    extra_sections = [
+        (k, k.replace("_", " ").title())
+        for k in content.keys()
+        if k not in predefined_keys and k != "title" and content.get(k)
+    ]
+
+    sections_order = predefined_sections + extra_sections
 
     for key, label in sections_order:
         value = content.get(key)

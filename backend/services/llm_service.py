@@ -22,29 +22,45 @@ Generate a college lab worksheet for the following:
 Topic: {topic}
 Description: {description}
 Student Code: {code}
-Custom Instructions: {custom_instructions}
 Programming Language: {programming_language}
-Sections Needed: {sections}
 
 Reference Content:
 {web_content}
 
-Return this exact JSON structure:
+IMPORTANT Custom Instructions (must follow strictly): {custom_instructions}
+
+Generate worksheet with EXACTLY these sections: {sections}
+
+STRICT RULES:
+- Generate ALL sections listed above without exception
+- For each section use the exact key name in JSON
+- Return ONLY valid JSON, no extra text
+- Use student code as-is in code section if provided
+- For list sections like learning_outcomes, viva_questions return array of strings
+- For code section return code as string
+- All other sections return as string
+
+Return JSON with exactly these keys plus title:
 {{
     "title": "worksheet title here",
-    "objective": "objective text here",
-    "theory": "theory text here",
-    "algorithm": ["step 1", "step 2", "step 3"],
-    "code": "code here",
-    "expected_output": "expected output here",
-    "learning_outcomes": ["outcome 1", "outcome 2", "outcome 3"],
-    "viva_questions": ["question 1", "question 2"],
-    "references": ["reference 1", "reference 2"],
-    "conclusion": "conclusion text here"
+    "objective": "if requested",
+    "theory": "if requested",
+    "algorithm": ["step 1", "step 2"],
+    "code": "if requested",
+    "expected_output": "if requested",
+    "learning_outcomes": ["outcome 1", "outcome 2"],
+    "viva_questions": ["q1", "q2"],
+    "references": ["ref1"],
+    "conclusion": "if requested",
+    "introduction": "if requested",
+    "aim": "if requested",
+    "task_to_be_done": "if requested",
+    "apparatus": "if requested"
 }}
 
-Only include sections requested: {sections}
-Set unrequested sections to null.
+Only include sections from this list: {sections}
+Set ALL other sections to null.
+Any custom section names not in the above template — add them as new keys with generated content.
 """)
 ])
 
