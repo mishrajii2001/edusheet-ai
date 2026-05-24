@@ -571,8 +571,6 @@ body {
 
 .sliders { display: flex; flex-direction: column; gap: 22px; margin: 16px 0; }
 
-.slider-row {}
-
 .slider-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
 
 .slider-label { font-size: 0.82rem; font-weight: 600; color: var(--text2); text-transform: uppercase; letter-spacing: 0.4px; }
