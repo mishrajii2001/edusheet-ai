@@ -12,55 +12,61 @@ llm = ChatGroq(
 )
 
 prompt_template = ChatPromptTemplate.from_messages([
-    ("system", """You are an expert college lab worksheet generator.
+    ("system", """You are an expert college lab worksheet generator for Indian universities.
+You generate detailed, accurate, and well-structured lab worksheets.
 Always return ONLY a valid JSON object.
 Never add any text outside the JSON.
-Never add markdown or backticks."""),
+Never add markdown or backticks.
+Generate content that is detailed enough for a 3-4 page worksheet."""),
     ("human", """
-Generate a college lab worksheet for the following:
+Generate a detailed college lab worksheet for the following:
 
 Topic: {topic}
 Description: {description}
 Student Code: {code}
 Programming Language: {programming_language}
 
-Reference Content:
+Reference Content from Web:
 {web_content}
 
-IMPORTANT Custom Instructions (must follow strictly): {custom_instructions}
+IMPORTANT Instructions (follow strictly):
+{custom_instructions}
 
 Generate worksheet with EXACTLY these sections: {sections}
 
-STRICT RULES:
-- Generate ALL sections listed above without exception
-- For each section use the exact key name in JSON
-- Return ONLY valid JSON, no extra text
-- Use student code as-is in code section if provided
-- For list sections like learning_outcomes, viva_questions return array of strings
-- For code section return code as string
-- All other sections return as string
+STRICT CONTENT RULES:
+- Theory must be AT LEAST 150-200 words with proper explanation
+- Algorithm must have AT LEAST 8-10 detailed steps
+- Code must be complete, working, and well commented
+- Learning outcomes must have AT LEAST 5 specific points
+- Viva questions must have AT LEAST 5 questions with answers
+- Conclusion must be AT LEAST 80-100 words
+- Objective must clearly state the purpose in 3-4 lines
+- References must include at least 3 real sources
+- Every section must have substantial, meaningful content
+- Content should be appropriate for MCA/B.Tech/BCA level students
 
-Return JSON with exactly these keys plus title:
+Return JSON with exactly these keys:
 {{
-    "title": "worksheet title here",
-    "objective": "if requested",
-    "theory": "if requested",
-    "algorithm": ["step 1", "step 2"],
-    "code": "if requested",
-    "expected_output": "if requested",
-    "learning_outcomes": ["outcome 1", "outcome 2"],
-    "viva_questions": ["q1", "q2"],
-    "references": ["ref1"],
-    "conclusion": "if requested",
-    "introduction": "if requested",
-    "aim": "if requested",
-    "task_to_be_done": "if requested",
-    "apparatus": "if requested"
+    "title": "proper worksheet title",
+    "aim": "clear aim in 2-3 lines if requested",
+    "introduction": "detailed introduction if requested",
+    "objective": "detailed objective in 3-4 lines",
+    "apparatus": "tools and software needed if requested",
+    "theory": "detailed theory minimum 150 words",
+    "algorithm": ["detailed step 1", "detailed step 2", "at least 8 steps"],
+    "code": "complete well-commented code",
+    "expected_output": "detailed expected output description",
+    "result": "result section if requested",
+    "learning_outcomes": ["outcome 1", "outcome 2", "outcome 3", "outcome 4", "outcome 5"],
+    "viva_questions": ["Q1: question? Ans: answer", "Q2: question? Ans: answer", "at least 5"],
+    "references": ["Author, Title, Year", "reference 2", "reference 3"],
+    "conclusion": "detailed conclusion minimum 80 words"
 }}
 
 Only include sections from this list: {sections}
 Set ALL other sections to null.
-Any custom section names not in the above template — add them as new keys with generated content.
+Any custom section names — add them as new keys with detailed generated content.
 """)
 ])
 
