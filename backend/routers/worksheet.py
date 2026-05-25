@@ -48,6 +48,7 @@ async def generate_worksheet(
     image1: UploadFile = File(None),
     image2: UploadFile = File(None),
     image3: UploadFile = File(None),
+    header_image: UploadFile = File(None),
 ):
     try:
         try:
@@ -93,6 +94,19 @@ async def generate_worksheet(
                 print(f"Image {i+1} processing failed: {str(e)}")
                 continue
 
+        header_image_path = None
+        if header_image and header_image.filename:
+            try:
+                ext = header_image.filename.split(".")[-1].lower()
+                filename = f"header_{uuid.uuid4().hex}.{ext}"
+                filepath = os.path.join(UPLOAD_DIR, filename)
+                with open(filepath, "wb") as f:
+                    shutil.copyfileobj(header_image.file, f)
+                header_image_path = compress_image(filepath)
+                print(f"Header image saved: {header_image_path}")
+            except Exception as e:
+                print(f"Header image processing failed: {str(e)}")
+
         web_content = None
         if topic:
             print("Checking ChromaDB for web content...")
@@ -121,7 +135,8 @@ async def generate_worksheet(
         file_name = create_worksheet(
             content=content,
             formatting=formatting_dict,
-            images=saved_images if saved_images else None
+            images=saved_images if saved_images else None,
+            header_image=header_image_path
         )
 
         return WorksheetResponse(

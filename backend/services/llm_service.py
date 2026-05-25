@@ -14,10 +14,14 @@ llm = ChatGroq(
 prompt_template = ChatPromptTemplate.from_messages([
     ("system", """You are an expert college lab worksheet generator for Indian universities.
 You generate detailed, accurate, and well-structured lab worksheets.
-Always return ONLY a valid JSON object.
-Never add any text outside the JSON.
-Never add markdown or backticks.
-Generate content that is detailed enough for a 3-4 page worksheet."""),
+
+CRITICAL: Always return ONLY a valid JSON object.
+CRITICAL: Never add ```json or ``` or any markdown.
+CRITICAL: Never add any text before or after the JSON.
+Start your response with { and end with }
+
+Generate content detailed enough for a 3-4 page worksheet."""),
+
     ("human", """
 Generate a detailed college lab worksheet for the following:
 
@@ -95,9 +99,17 @@ def generate_worksheet_content(
     })
 
     try:
-        clean = response.replace("```json", "").replace("```", "").strip()
+        clean = response.strip()
+        clean = clean.replace("```json", "").replace("```JSON", "").replace("```", "")
+        start = clean.find("{")
+        end = clean.rfind("}") + 1
+
+        if start != -1 and end > start:
+            clean = clean[start:end]
+
         result = json.loads(clean)
         return result
+
     except json.JSONDecodeError:
         return {
             "title": topic or "Worksheet",
