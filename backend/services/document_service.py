@@ -45,16 +45,32 @@ def add_code_block(doc, code_text):
     pPr.append(shading)
     return paragraph
 
-def add_image_to_doc(doc, image_path, caption=None):
+def add_image_to_doc(doc, image_path, caption=None, max_width_inches=5.5):
     try:
-        doc.add_picture(image_path, width=Inches(5))
+        from PIL import Image as PILImage
+        img = PILImage.open(image_path)
+        img_width, img_height = img.size
+        aspect = img_width / img_height
+        if aspect > 2:
+            width = Inches(max_width_inches)
+        elif aspect < 0.7:
+            width = Inches(max_width_inches * 0.45)
+        else:
+            width = Inches(max_width_inches * 0.75)
+        doc.add_picture(image_path, width=width)
+        img_para = doc.paragraphs[-1]
+        img_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
         if caption:
             cap = doc.add_paragraph(caption)
             cap.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            for run in cap.runs:
+                run.font.size = Pt(10)
+                run.font.italic = True
+        doc.add_paragraph()
     except Exception as e:
         doc.add_paragraph(f"[Image could not be added: {str(e)}]")
 
-def create_worksheet(content, formatting, images=None):
+def create_worksheet(content, formatting, images=None, header_image=None):
     doc = Document()
 
     font_name = formatting.get("font_family", "Times New Roman")
@@ -63,12 +79,24 @@ def create_worksheet(content, formatting, images=None):
     alignment = formatting.get("alignment", "justified")
     margin = formatting.get("margin", 1.0)
 
+    # Set margins FIRST
     for section in doc.sections:
         section.top_margin = Inches(margin)
         section.bottom_margin = Inches(margin)
         section.left_margin = Inches(margin)
         section.right_margin = Inches(margin)
 
+    # THEN add header image
+    if header_image:
+        try:
+            doc.add_picture(header_image, width=Inches(6.5))
+            header_para = doc.paragraphs[-1]
+            header_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            doc.add_paragraph()
+        except Exception as e:
+            print(f"Header image failed: {str(e)}")
+
+    # THEN add title
     if content.get("title"):
         title = doc.add_paragraph()
         run = title.add_run(content["title"].upper())
@@ -77,6 +105,8 @@ def create_worksheet(content, formatting, images=None):
         run.font.bold = True
         title.alignment = WD_ALIGN_PARAGRAPH.CENTER
         doc.add_paragraph()
+
+    # ... rest of the code stays same
 
     predefined_sections = [
     ("aim", "Aim"),

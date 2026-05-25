@@ -52,7 +52,10 @@ export default function App() {
   const [error, setError] = useState('');
   const [fileName, setFileName] = useState('');
   const [images, setImages] = useState([]);
+  const [headerImage, setHeaderImage] = useState(null);
+  const [headerImagePreview, setHeaderImagePreview] = useState(null);
   const fileInputRefs = [useRef(), useRef(), useRef()];
+  const headerImageRef = useRef();
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', darkMode ? 'dark' : 'light');
@@ -64,42 +67,64 @@ export default function App() {
     return () => clearInterval(id);
   }, [loading]);
 
+  useEffect(() => {
+    const handlePaste = (e) => {
+      const items = e.clipboardData?.items;
+      if (!items) return;
+      for (let item of items) {
+        if (item.type.startsWith('image/')) {
+          const file = item.getAsFile();
+          if (!file) return;
+          const emptyIndex = images.findIndex(img => !img);
+          const targetIndex = emptyIndex !== -1 ? emptyIndex : images.length;
+          if (targetIndex >= MAX_IMAGES) {
+            setError('Maximum 3 images allowed');
+            return;
+          }
+          const preview = URL.createObjectURL(file);
+          const newImages = [...images];
+          newImages[targetIndex] = { file, preview, section: 'expected_output', caption: '' };
+          setImages(newImages);
+          setError('');
+          break;
+        }
+      }
+    };
+    window.addEventListener('paste', handlePaste);
+    return () => window.removeEventListener('paste', handlePaste);
+  }, [images]);
+
   const toggleSection = (key) => {
     setSections(prev => prev.includes(key) ? prev.filter(s => s !== key) : [...prev, key]);
+  };
+
+  const validateImageFile = (file) => {
+    const validTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/bmp'];
+    if (!validTypes.includes(file.type)) {
+      setError('Only image files allowed (JPG, PNG, GIF, WEBP)');
+      return false;
+    }
+    if (file.size > 25 * 1024 * 1024) {
+      setError('Image size should be less than 25MB');
+      return false;
+    }
+    return true;
   };
 
   const handleImageAdd = (e, index) => {
     const file = e.target.files[0];
     if (!file) return;
-
-    const validTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/bmp'];
-    if (!validTypes.includes(file.type)) {
-      setError('Only image files are allowed (JPG, PNG, GIF, WEBP)');
-      return;
-    }
-
-    if (file.size > 10 * 1024 * 1024) {
-      setError('Image size should be less than 10MB');
-      return;
-    }
-
+    if (!validateImageFile(file)) return;
     const preview = URL.createObjectURL(file);
     const newImages = [...images];
-    newImages[index] = {
-      file,
-      preview,
-      section: 'expected_output',
-      caption: ''
-    };
+    newImages[index] = { file, preview, section: 'expected_output', caption: '' };
     setImages(newImages);
     setError('');
   };
 
   const handleImageRemove = (index) => {
     const newImages = [...images];
-    if (newImages[index]?.preview) {
-      URL.revokeObjectURL(newImages[index].preview);
-    }
+    if (newImages[index]?.preview) URL.revokeObjectURL(newImages[index].preview);
     newImages[index] = null;
     setImages(newImages.filter(Boolean).length === 0 ? [] : newImages);
   };
@@ -110,6 +135,15 @@ export default function App() {
       newImages[index] = { ...newImages[index], [field]: value };
       setImages(newImages);
     }
+  };
+
+  const handleHeaderImageChange = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    if (!validateImageFile(file)) return;
+    setHeaderImage(file);
+    setHeaderImagePreview(URL.createObjectURL(file));
+    setError('');
   };
 
   const handleGenerate = async () => {
@@ -140,20 +174,16 @@ export default function App() {
     formData.append('sections', JSON.stringify(allSections));
     formData.append('programming_language', programmingLanguage);
     formData.append('formatting', JSON.stringify(formatting));
+    if (headerImage) formData.append('header_image', headerImage);
 
     const validImages = images.filter(Boolean);
     const imageMetadata = [];
-
     validImages.forEach((img, i) => {
       if (img?.file) {
         formData.append(`image${i + 1}`, img.file);
-        imageMetadata.push({
-          section: img.section,
-          caption: img.caption || `Figure ${i + 1}`
-        });
+        imageMetadata.push({ section: img.section, caption: img.caption || `Figure ${i + 1}` });
       }
     });
-
     formData.append('image_data', JSON.stringify(imageMetadata));
 
     try {
@@ -171,7 +201,8 @@ export default function App() {
   const resetAll = () => {
     setFileName(''); setTopic(''); setCode('');
     setDescription(''); setCustomInstructions('');
-    setImages([]); setActiveTab('content');
+    setImages([]); setHeaderImage(null);
+    setHeaderImagePreview(null); setActiveTab('content');
   };
 
   const activeImageCount = images.filter(Boolean).length;
@@ -272,15 +303,34 @@ export default function App() {
             </div>
 
             <div className="field">
+              <label>College Header Image <span className="opt">optional — appears on top of worksheet</span></label>
+              <p className="img-hint">🏫 Upload your college letterhead or logo</p>
+              <div className="header-image-area">
+                {headerImagePreview ? (
+                  <div className="header-preview-wrap">
+                    <img src={headerImagePreview} alt="header" className="header-preview" />
+                    <button className="image-remove" style={{ position: 'absolute', top: 8, right: 8 }}
+                      onClick={() => { setHeaderImage(null); setHeaderImagePreview(null); }}>✕</button>
+                    <span className="header-badge">✅ Header Image Set</span>
+                  </div>
+                ) : (
+                  <button className="header-upload-btn" onClick={() => headerImageRef.current.click()}>
+                    <span style={{ fontSize: '1.5rem' }}>🏫</span>
+                    <span>Click to upload college header / logo</span>
+                    <span style={{ fontSize: '0.75rem', color: 'var(--text3)' }}>Or paste with Ctrl+V — JPG, PNG supported</span>
+                  </button>
+                )}
+                <input ref={headerImageRef} type="file" accept="image/*"
+                  style={{ display: 'none' }} onChange={handleHeaderImageChange} />
+              </div>
+            </div>
+
+            <div className="field">
               <label>
                 Upload Images <span className="opt">optional — max 3 images</span>
-                {activeImageCount > 0 && (
-                  <span className="img-count-badge">{activeImageCount}/{MAX_IMAGES}</span>
-                )}
+                {activeImageCount > 0 && <span className="img-count-badge">{activeImageCount}/{MAX_IMAGES}</span>}
               </label>
-              <p className="img-hint">
-                📸 Output screenshots, diagrams, flowcharts, graphs — anything you want in the worksheet
-              </p>
+              <p className="img-hint">📸 Output screenshots, diagrams, flowcharts — paste with Ctrl+V or click to upload</p>
 
               <div className="images-grid">
                 {[0, 1, 2].map(index => (
@@ -297,9 +347,7 @@ export default function App() {
                             <label style={{ fontSize: '0.75rem' }}>Place in section</label>
                             <select className="sel" value={images[index].section}
                               onChange={e => handleImageMeta(index, 'section', e.target.value)}>
-                              {SECTIONS.map(s => (
-                                <option key={s.key} value={s.key}>{s.icon} {s.label}</option>
-                              ))}
+                              {SECTIONS.map(s => <option key={s.key} value={s.key}>{s.icon} {s.label}</option>)}
                             </select>
                           </div>
                           <div className="field" style={{ marginBottom: 0 }}>
@@ -316,12 +364,8 @@ export default function App() {
                         onClick={() => fileInputRefs[index].current.click()}
                         disabled={activeImageCount >= MAX_IMAGES && !images[index]}>
                         <span className="image-add-icon">🖼️</span>
-                        <span className="image-add-text">
-                          {index === 0 ? 'Add Image' : `Image ${index + 1}`}
-                        </span>
-                        <span className="image-add-hint">
-                          {index === 0 ? 'Output, diagram...' : 'Optional'}
-                        </span>
+                        <span className="image-add-text">{index === 0 ? 'Add Image' : `Image ${index + 1}`}</span>
+                        <span className="image-add-hint">{index === 0 ? 'Click or Ctrl+V' : 'Optional'}</span>
                         <input ref={fileInputRefs[index]} type="file" accept="image/*"
                           style={{ display: 'none' }} onChange={e => handleImageAdd(e, index)} />
                       </button>
@@ -338,9 +382,7 @@ export default function App() {
               )}
             </div>
 
-            <button className="btn-next" onClick={() => setActiveTab('sections')}>
-              Continue to Sections →
-            </button>
+            <button className="btn-next" onClick={() => setActiveTab('sections')}>Continue to Sections →</button>
           </div>
         )}
 
@@ -371,17 +413,14 @@ export default function App() {
                   onClick={() => toggleSection(s.key)}>
                   <span className="sec-icon">{s.icon}</span>
                   <span className="sec-label">{s.label}</span>
-                  {sections.includes(s.key) && (
-                    <span className="sec-num">{sections.indexOf(s.key) + 1}</span>
-                  )}
+                  {sections.includes(s.key) && <span className="sec-num">{sections.indexOf(s.key) + 1}</span>}
                 </button>
               ))}
             </div>
 
             <div className="field" style={{ marginTop: 20 }}>
               <label>➕ Custom Sections <span className="opt">separate with commas</span></label>
-              <input className="inp" type="text"
-                placeholder="e.g. Aim, Task to be Done, Apparatus"
+              <input className="inp" type="text" placeholder="e.g. Aim, Task to be Done, Apparatus"
                 value={customSections} onChange={e => setCustomSections(e.target.value)} />
             </div>
 
