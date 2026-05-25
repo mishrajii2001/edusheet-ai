@@ -14,12 +14,10 @@ llm = ChatGroq(
 prompt_template = ChatPromptTemplate.from_messages([
     ("system", """You are an expert college lab worksheet generator for Indian universities.
 You generate detailed, accurate, and well-structured lab worksheets.
-
 CRITICAL: Always return ONLY a valid JSON object.
-CRITICAL: Never add ```json or ``` or any markdown.
+CRITICAL: Never add backticks or markdown formatting.
 CRITICAL: Never add any text before or after the JSON.
-Start your response with { and end with }
-
+Start your response directly with the opening curly brace of JSON.
 Generate content detailed enough for a 3-4 page worksheet."""),
 
     ("human", """
